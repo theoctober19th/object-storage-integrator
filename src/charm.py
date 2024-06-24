@@ -26,6 +26,9 @@ from constants import (
     S3_LIST_OPTIONS,
     S3_MANDATORY_OPTIONS,
     S3_OPTIONS,
+
+    S3_RELATION_NAME,
+    AZURE_RELATION_NAME
 )
 
 logger = logging.getLogger(__name__)

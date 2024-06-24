@@ -161,6 +161,7 @@ def diff(event: RelationChangedEvent, bucket: Union[Unit, Application]) -> Diff:
         a Diff instance containing the added, deleted and changed
             keys from the event relation databag.
     """
+    logger.info(event.relation.data)
     # Retrieve the old data from the data key in the application relation databag.
     old_data = json.loads(event.relation.data[bucket].get("data", "{}"))
     # Retrieve the new data from the event relation databag.

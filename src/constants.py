@@ -25,3 +25,7 @@ S3_MANDATORY_OPTIONS = [
 S3_LIST_OPTIONS = ["attributes", "tls-ca-chain"]
 KEYS_LIST = ["access-key", "secret-key"]
 MAX_RETENTION_DAYS = 9999999
+
+
+S3_RELATION_NAME = "s3-credentials"
+AZURE_RELATION_NAME = "azure-credentials"
