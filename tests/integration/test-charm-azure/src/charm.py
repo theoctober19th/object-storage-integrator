@@ -10,10 +10,10 @@ the database requires-provides relation.
 
 import logging
 
-from charms.data_platform_libs.v0.azure import (
+from charms.data_platform_libs.v0.object_storage import (
+    AzureStorageRequirer,
     CredentialsChangedEvent,
     CredentialsGoneEvent,
-    AzureStorageRequirer,
 )
 from ops.charm import CharmBase, RelationJoinedEvent
 from ops.main import main
@@ -41,7 +41,9 @@ class ApplicationCharm(CharmBase):
         # (these events are defined in the database requires charm library).
 
         self.first_azure_client = AzureStorageRequirer(self, FIRST_RELATION)
-        self.second_azure_client = AzureStorageRequirer(self, SECOND_RELATION, container_name=CONTAINER_NAME)
+        self.second_azure_client = AzureStorageRequirer(
+            self, SECOND_RELATION, container_name=CONTAINER_NAME
+        )
 
         # add relation
         self.framework.observe(

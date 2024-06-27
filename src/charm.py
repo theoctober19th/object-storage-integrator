@@ -12,24 +12,25 @@ import ops.framework
 import ops.lib
 import ops.main
 import ops.model
-from charms.data_platform_libs.v0.azure import AzureStorageProvider, CredentialRequestedEvent as AzureCredentialRequestedEvent
-
+from charms.data_platform_libs.v0.object_storage import (
+    AzureStorageProvider,
+    CredentialRequestedEvent,
+)
 from ops.charm import ActionEvent, ConfigChangedEvent, RelationChangedEvent, StartEvent
 from ops.model import ActiveStatus, BlockedStatus
 
 from constants import (
-    KEYS_LIST,
-    PEER_RELATION_NAME,
     AZURE_MANDATORY_OPTIONS,
     AZURE_OPTIONS,
-
     AZURE_RELATION_NAME,
+    KEYS_LIST,
+    PEER_RELATION_NAME,
 )
 
 logger = logging.getLogger(__name__)
 
 
-class ObjectIntegratorCharm(ops.charm.CharmBase):
+class ObjectStorageIntegratorCharm(ops.charm.CharmBase):
     """Charm for s3 integrator service."""
 
     def __init__(self, *args) -> None:
@@ -39,20 +40,27 @@ class ObjectIntegratorCharm(ops.charm.CharmBase):
         self.framework.observe(self.on.start, self._on_start)
         self.framework.observe(self.on.config_changed, self._on_config_changed)
 
-        self.framework.observe(self.azure_provider.on.credentials_requested, self._on_azure_credentials_requested)
+        self.framework.observe(
+            self.azure_provider.on.credentials_requested, self._on_azure_credentials_requested
+        )
 
-        self.framework.observe(self.on[PEER_RELATION_NAME].relation_changed, self._on_peer_relation_changed)
-        
+        self.framework.observe(
+            self.on[PEER_RELATION_NAME].relation_changed, self._on_peer_relation_changed
+        )
+
         # actions
-        self.framework.observe(self.on.sync_azure_credentials_action, self._on_sync_azure_credentials)
+        self.framework.observe(
+            self.on.sync_azure_credentials_action, self._on_sync_azure_credentials
+        )
 
-        self.framework.observe(self.on.get_azure_credentials_action, self.on_get_credentials_action)
+        self.framework.observe(
+            self.on.get_azure_credentials_action, self.on_get_credentials_action
+        )
         self.framework.observe(
             self.on.get_azure_connection_info_action, self.on_get_connection_info_action
         )
 
-
-    def _on_azure_credentials_requested(self, event: AzureCredentialRequestedEvent):
+    def _on_azure_credentials_requested(self, event: CredentialRequestedEvent):
         """Handle the `credential-requested` event for azure storage."""
         if not self.unit.is_leader():
             return
@@ -108,8 +116,6 @@ class ObjectIntegratorCharm(ops.charm.CharmBase):
         logger.debug(f"Current configuration: {self.config}")
         # store updates from config and apply them.
         update_config = {}
-        s3_update_config = {}
-        azure_update_config = {}
 
         # iterate over the option and check for updates
         for option in AZURE_OPTIONS:
@@ -128,7 +134,6 @@ class ObjectIntegratorCharm(ops.charm.CharmBase):
 
             update_config.update({option: str(self.config[option])})
             self.set_secret("app", option, str(self.config[option]))
-
 
         if len(self.azure_provider.relations) > 0:
             for relation in self.azure_provider.relations:
@@ -164,7 +169,7 @@ class ObjectIntegratorCharm(ops.charm.CharmBase):
         for config_option in AZURE_MANDATORY_OPTIONS:
             if not self.get_secret("app", config_option):
                 missing_options.append(config_option)
-        return missing_options 
+        return missing_options
 
     def _on_sync_azure_credentials(self, event: ops.charm.ActionEvent) -> None:
         """Handle a user synchronizing their Azure credentials to the charm."""
@@ -226,4 +231,4 @@ class ObjectIntegratorCharm(ops.charm.CharmBase):
 
 
 if __name__ == "__main__":
-    ops.main.main(ObjectIntegratorCharm)
+    ops.main.main(ObjectStorageIntegratorCharm)

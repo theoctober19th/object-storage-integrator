@@ -1,13 +1,22 @@
+#!/usr/bin/env python3
+# Copyright 2024 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+import json
 import logging
 from collections import namedtuple
-import json
 from typing import Dict, List, Optional, Union
 
 import ops
-from ops.framework import Object, EventSource, ObjectEvents
-from ops.charm import CharmEvents, RelationEvent, RelationChangedEvent, RelationJoinedEvent, RelationBrokenEvent
-from ops.model import Unit, Application, Relation
-
+from ops.charm import (
+    CharmEvents,
+    RelationBrokenEvent,
+    RelationChangedEvent,
+    RelationEvent,
+    RelationJoinedEvent,
+)
+from ops.framework import EventSource, Object, ObjectEvents
+from ops.model import Application, Relation, Unit
 
 # The unique Charmhub library identifier, never change it
 LIBID = "fca396f6254246c9bfa5650000000000"
@@ -31,9 +40,7 @@ changed - keys that still exist but have new values
 deleted - key that were deleted"""
 
 
-AZURE_STORAGE_REQUIRED_OPTIONS = [
-    "container", "storage-account", "secret-key"
-]
+AZURE_STORAGE_REQUIRED_OPTIONS = ["container", "storage-account", "secret-key"]
 
 
 class AzureStorageEvent(RelationEvent):
@@ -52,7 +59,11 @@ class ContainerEvent(RelationEvent):
 
     @property
     def container(self):
-        return "my-custom-container"
+        """Returns the bucket that was requested."""
+        if not self.relation.app:
+            return None
+        return self.relation.data[self.relation.app].get("container", "")
+
 
 class CredentialRequestedEvent(ContainerEvent):
     pass
@@ -75,7 +86,6 @@ class AzureStorageCredentialsRequiresEvents(ObjectEvents):
 
     credentials_changed = EventSource(CredentialsChangedEvent)
     credentials_gone = EventSource(CredentialsGoneEvent)
-
 
 
 def diff(event: RelationChangedEvent, bucket: Union[Unit, Application]) -> Diff:
@@ -116,7 +126,6 @@ def diff(event: RelationChangedEvent, bucket: Union[Unit, Application]) -> Diff:
     return Diff(added, changed, deleted)
 
 
-
 class AzureStorageProvider(Object):
     on = AzureStorageCredentialEvents()
 
@@ -127,8 +136,6 @@ class AzureStorageProvider(Object):
         self.local_unit = self.charm.unit
         self.relation_name = relation_name
         self.framework.observe(charm.on[relation_name].relation_changed, self._on_relation_changed)
-
-
 
     def _diff(self, event: RelationChangedEvent) -> Diff:
         """Retrieves the diff of the data in the relation changed databag.
@@ -141,16 +148,14 @@ class AzureStorageProvider(Object):
                 keys from the event relation databag.
         """
         return diff(event, self.local_app)
-    
+
     def _on_relation_changed(self, event):
         logger.info("osi: on relation changed...")
         if not self.charm.unit.is_leader():
             return
         diff = self._diff(event)
-        if "az-container-name" in diff.added:
-            self.on.credentials_requested.emit(
-                event.relation, app=event.app, unit=event.unit
-            )
+        if "container" in diff.added:
+            self.on.credentials_requested.emit(event.relation, app=event.app, unit=event.unit)
             logger.info("osi: emitted event credential-requested...")
 
     @property
@@ -169,7 +174,6 @@ class AzureStorageProvider(Object):
             secret_key: the value of the secret key.
         """
         self.update_connection_info(relation_id, {"secret-key": secret_key})
-
 
     def update_connection_info(self, relation_id: int, connection_data: dict) -> None:
         """Updates the credential data as set of key-value pairs in the relation.
@@ -200,6 +204,7 @@ class AzureStorageProvider(Object):
 
         relation.data[self.local_app].update(updated_connection_data)
         logger.debug(f"Updated azure credentials: {updated_connection_data}")
+
 
 class AzureStorageRequirer(Object):
     on = AzureStorageCredentialsRequiresEvents()  # pyright: ignore[reportAssignmentType]
@@ -245,17 +250,15 @@ class AzureStorageRequirer(Object):
                 connection_data[key] = raw_relation_data[key]
         return connection_data
 
-
     @property
     def relations(self) -> List[Relation]:
         """The list of Relation instances associated with this relation_name."""
         return list(self.charm.model.relations[self.relation_name])
 
-
     def _generate_container_name(self, event: RelationJoinedEvent):
         """Returns the container name generated from relation id."""
         return f"relation-{event.relation.id}"
-    
+
     def update_connection_info(self, relation_id: int, connection_data: dict) -> None:
         """Updates the credential data as set of key-value pairs in the relation.
 
@@ -286,7 +289,6 @@ class AzureStorageRequirer(Object):
         relation.data[self.local_app].update(updated_connection_data)
         logger.debug(f"Updated azure credentials: {updated_connection_data}")
 
-
     def get_azure_connection_info(self) -> Dict[str, str]:
         """Return the azure storage credentials as a dictionary."""
         for relation in self.relations:
@@ -294,7 +296,7 @@ class AzureStorageRequirer(Object):
                 return self._load_relation_data(relation.data[relation.app])
 
         return {}
-    
+
     def _on_relation_changed(self, event: RelationChangedEvent) -> None:
         """Notify the charm about the presence of S3 credentials."""
         logger.info("Azure storage relation changed...")
@@ -310,7 +312,7 @@ class AzureStorageRequirer(Object):
             if configuration_option not in credentials:
                 contains_required_options = False
                 missing_options.append(configuration_option)
-       
+
         # emit credential change event only if all mandatory fields are present
         if contains_required_options:
             logger.warning("All mandatory fields are present...")
@@ -321,7 +323,6 @@ class AzureStorageRequirer(Object):
         getattr(self.on, "credentials_changed").emit(
             event.relation, app=event.app, unit=event.unit
         )
-
 
     def _on_relation_joined(self, event: RelationJoinedEvent) -> None:
         logger.info("gogo: Azure storage relation joined...")

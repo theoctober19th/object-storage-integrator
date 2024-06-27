@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-# Copyright 2022 Canonical Ltd.
+# Copyright 2024 Canonical Ltd.
 # See LICENSE file for licensing details.
+
 import asyncio
 import logging
 from pathlib import Path
@@ -91,7 +92,7 @@ async def test_sync_credential_action(ops_test: OpsTest):
     secret_key = "test-secret-key"
 
     action_result = await fetch_action_sync_azure_credentials(
-        object_storage_integrator_unit,  secret_key=secret_key
+        object_storage_integrator_unit, secret_key=secret_key
     )
 
     # test the correct status of the charm
@@ -126,7 +127,7 @@ async def test_config_options(ops_test: OpsTest):
     configuration_parameters = {
         "storage-account": "stoacc",
         "path": "/test/path_1/",
-        "container": "test-container"
+        "container": "test-container",
     }
     # apply new configuration options
     await ops_test.model.applications[CHARM_NAME].set_config(configuration_parameters)
@@ -134,7 +135,9 @@ async def test_config_options(ops_test: OpsTest):
     await ops_test.model.wait_for_idle(apps=[CHARM_NAME], status="active")
     # test the returns
     object_storage_integrator_unit = ops_test.model.applications[CHARM_NAME].units[0]
-    action = await object_storage_integrator_unit.run_action(action_name="get-azure-connection-info")
+    action = await object_storage_integrator_unit.run_action(
+        action_name="get-azure-connection-info"
+    )
     action_result = await action.wait()
     configured_options = action_result.results
     # test the correctness of the configuration fields
@@ -163,12 +166,10 @@ async def test_relation_creation(ops_test: OpsTest):
     logger.info(relation_data)
     logger.info(application_data)
 
-    # check if the different parameters correspond to expected ones.
-    relation_id = relation_data[0]["relation-id"]
     # check correctness for some fields
     assert "secret-key" in application_data
     assert "container" in application_data
-    assert application_data["container"] == f"test-container"
+    assert application_data["container"] == "test-container"
     assert application_data["secret-key"] == "new-test-secret-key"
     assert application_data["storage-account"] == "stoacc"
     assert application_data["path"] == "/test/path_1/"
