@@ -24,9 +24,9 @@ maintainers:
   - Data Platform Team <data-platform@lists.launchpad.net>
 
 peers:
-  s3-integrator-peers:
-    interface: s3-integrator-peers
+  object-storage-integrator-peers:
+    interface: object-storage-integrator-peers
 
 provides:
-  s3-credentials:
-    interface: s3
+  azure-credentials:
+    interface: azure

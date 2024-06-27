@@ -147,7 +147,7 @@ class AzureStorageProvider(Object):
         if not self.charm.unit.is_leader():
             return
         diff = self._diff(event)
-        if "container" in diff.added:
+        if "az-container-name" in diff.added:
             self.on.credentials_requested.emit(
                 event.relation, app=event.app, unit=event.unit
             )

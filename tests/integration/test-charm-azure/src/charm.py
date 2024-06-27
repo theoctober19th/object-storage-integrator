@@ -10,10 +10,10 @@ the database requires-provides relation.
 
 import logging
 
-from charms.data_platform_libs.v0.s3 import (
+from charms.data_platform_libs.v0.azure import (
     CredentialsChangedEvent,
     CredentialsGoneEvent,
-    S3Requirer,
+    AzureStorageRequirer,
 )
 from ops.charm import CharmBase, RelationJoinedEvent
 from ops.main import main
@@ -22,9 +22,10 @@ from ops.model import ActiveStatus, WaitingStatus
 logger = logging.getLogger(__name__)
 
 PEER = "application-peers"
-FIRST_RELATION = "first-s3-credentials"
-SECOND_RELATION = "second-s3-credentials"
-BUCKET_NAME = "test-bucket"
+
+FIRST_RELATION = "first-azure-credentials"
+SECOND_RELATION = "second-azure-credentials"
+CONTAINER_NAME = "test-bucket"
 
 
 class ApplicationCharm(CharmBase):
@@ -39,15 +40,15 @@ class ApplicationCharm(CharmBase):
         # Events related to the requested database
         # (these events are defined in the database requires charm library).
 
-        self.first_s3_client = S3Requirer(self, FIRST_RELATION)
-        self.second_s3_client = S3Requirer(self, SECOND_RELATION, bucket_name=BUCKET_NAME)
+        self.first_azure_client = AzureStorageRequirer(self, FIRST_RELATION)
+        self.second_azure_client = AzureStorageRequirer(self, SECOND_RELATION, container_name=CONTAINER_NAME)
 
         # add relation
         self.framework.observe(
-            self.first_s3_client.on.credentials_changed, self._on_first_credential_changed
+            self.first_azure_client.on.credentials_changed, self._on_first_credential_changed
         )
         self.framework.observe(
-            self.second_s3_client.on.credentials_changed, self._on_second_credential_changed
+            self.second_azure_client.on.credentials_changed, self._on_second_credential_changed
         )
 
         self.framework.observe(
@@ -58,10 +59,10 @@ class ApplicationCharm(CharmBase):
         )
 
         self.framework.observe(
-            self.first_s3_client.on.credentials_gone, self._on_first_credential_gone
+            self.first_azure_client.on.credentials_gone, self._on_first_credential_gone
         )
         self.framework.observe(
-            self.second_s3_client.on.credentials_gone, self._on_second_credential_gone
+            self.second_azure_client.on.credentials_gone, self._on_second_credential_gone
         )
 
     def _on_start(self, _) -> None:
@@ -69,7 +70,7 @@ class ApplicationCharm(CharmBase):
         self.unit.status = WaitingStatus("Waiting for relation")
 
     def _on_first_relation_joined(self, _: RelationJoinedEvent):
-        """On s3 credential relation joined."""
+        """On Azure credential relation joined."""
         self.unit.status = ActiveStatus()
 
     def _on_second_relation_joined(self, _: RelationJoinedEvent):
@@ -77,19 +78,19 @@ class ApplicationCharm(CharmBase):
         self.unit.status = ActiveStatus()
 
     def _on_first_credential_changed(self, e: CredentialsChangedEvent):
-        credentials = self.first_s3_client.get_s3_connection_info()
-        logger.info(f"First relation updated credentials: {credentials}")
+        credentials = self.first_azure_client.get_azure_connection_info()
+        logger.info(f"First Azure credential info: {credentials}")
 
     def _on_second_credential_changed(self, e: CredentialsChangedEvent):
-        credentials = self.second_s3_client.get_s3_connection_info()
-        logger.info(f"Second relation updated credentials: {credentials}")
+        credentials = self.second_azure_client.get_azure_connection_info()
+        logger.info(f"Second Azure credential info: {credentials}")
 
     def _on_first_credential_gone(self, _: CredentialsGoneEvent):
-        logger.info("First relation credentials GONE!")
+        logger.info("appcharm: first Azure relation credentials GONE!")
         self.unit.status = WaitingStatus("Waiting for relation")
 
     def _on_second_credential_gone(self, _: CredentialsGoneEvent):
-        logger.info("Second relation Credentials GONE!")
+        logger.info("appcharm: second Azure relation credentials GONE!")
         self.unit.status = WaitingStatus("Waiting for relation")
 
     @property

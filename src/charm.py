@@ -3,10 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """A charm of the s3 integrator service."""
 
-import base64
-import json
 import logging
-import re
 from typing import Dict, List, Optional
 
 import ops
@@ -15,48 +12,73 @@ import ops.framework
 import ops.lib
 import ops.main
 import ops.model
-from charms.data_platform_libs.v0.s3 import CredentialRequestedEvent, S3Provider
+from charms.data_platform_libs.v0.azure import AzureStorageProvider, CredentialRequestedEvent as AzureCredentialRequestedEvent
+
 from ops.charm import ActionEvent, ConfigChangedEvent, RelationChangedEvent, StartEvent
 from ops.model import ActiveStatus, BlockedStatus
 
 from constants import (
     KEYS_LIST,
-    MAX_RETENTION_DAYS,
-    PEER,
-    S3_LIST_OPTIONS,
-    S3_MANDATORY_OPTIONS,
-    S3_OPTIONS,
+    PEER_RELATION_NAME,
+    AZURE_MANDATORY_OPTIONS,
+    AZURE_OPTIONS,
 
-    S3_RELATION_NAME,
-    AZURE_RELATION_NAME
+    AZURE_RELATION_NAME,
 )
 
 logger = logging.getLogger(__name__)
 
 
-class S3IntegratorCharm(ops.charm.CharmBase):
+class ObjectIntegratorCharm(ops.charm.CharmBase):
     """Charm for s3 integrator service."""
 
     def __init__(self, *args) -> None:
         super().__init__(*args)
-        self.s3_provider = S3Provider(self, "s3-credentials")
+        self.azure_provider = AzureStorageProvider(self, AZURE_RELATION_NAME)
+
         self.framework.observe(self.on.start, self._on_start)
         self.framework.observe(self.on.config_changed, self._on_config_changed)
-        self.framework.observe(
-            self.s3_provider.on.credentials_requested, self._on_credential_requested
-        )
-        self.framework.observe(self.on[PEER].relation_changed, self._on_peer_relation_changed)
+
+        self.framework.observe(self.azure_provider.on.credentials_requested, self._on_azure_credentials_requested)
+
+        self.framework.observe(self.on[PEER_RELATION_NAME].relation_changed, self._on_peer_relation_changed)
+        
         # actions
-        self.framework.observe(self.on.sync_s3_credentials_action, self._on_sync_s3_credentials)
-        self.framework.observe(self.on.get_s3_credentials_action, self.on_get_credentials_action)
+        self.framework.observe(self.on.sync_azure_credentials_action, self._on_sync_azure_credentials)
+
+        self.framework.observe(self.on.get_azure_credentials_action, self.on_get_credentials_action)
         self.framework.observe(
-            self.on.get_s3_connection_info_action, self.on_get_connection_info_action
+            self.on.get_azure_connection_info_action, self.on_get_connection_info_action
         )
+
+
+    def _on_azure_credentials_requested(self, event: AzureCredentialRequestedEvent):
+        """Handle the `credential-requested` event for azure storage."""
+        if not self.unit.is_leader():
+            return
+        relation_id = event.relation.id
+
+        container_name = self.get_secret("app", "container") or event.container
+
+        logger.debug(f"Desired container name: {container_name}")
+        assert container_name is not None
+        # if bucket name is already specified ignore the one provided by the requirer app
+        if self.get_secret("app", container_name) is None:
+            self.set_secret("app", "container", container_name)
+
+        desired_configuration = {}
+        # collect all configuration options
+        for option in AZURE_OPTIONS:
+            if self.get_secret("app", option) is not None:
+                desired_configuration[option] = self.get_secret("app", option)
+
+        # update connection parameters in the relation data bug
+        self.azure_provider.update_connection_info(relation_id, desired_configuration)
 
     @property
     def app_peer_data(self) -> Dict:
         """Application peer relation data object."""
-        relation = self.model.get_relation(PEER)
+        relation = self.model.get_relation(PEER_RELATION_NAME)
         if not relation:
             return {}
 
@@ -65,7 +87,7 @@ class S3IntegratorCharm(ops.charm.CharmBase):
     @property
     def unit_peer_data(self) -> Dict:
         """Peer relation data object."""
-        relation = self.model.get_relation(PEER)
+        relation = self.model.get_relation(PEER_RELATION_NAME)
         if relation is None:
             return {}
 
@@ -86,28 +108,11 @@ class S3IntegratorCharm(ops.charm.CharmBase):
         logger.debug(f"Current configuration: {self.config}")
         # store updates from config and apply them.
         update_config = {}
+        s3_update_config = {}
+        azure_update_config = {}
 
         # iterate over the option and check for updates
-        for option in S3_OPTIONS:
-            # experimental config options should be handled with the "experimental-" prefix
-            if option == "delete-older-than-days" and f"experimental-{option}" in self.config:
-                config_value = self.config[f"experimental-{option}"]
-                # check if new config value is inside allowed range
-                if config_value > 0 and config_value <= MAX_RETENTION_DAYS:
-                    update_config.update({option: str(config_value)})
-                    self.set_secret("app", option, str(config_value))
-                    self.unit.status = ActiveStatus()
-                else:
-                    logger.warning(
-                        "Invalid value %s for config '%s'",
-                        config_value,
-                        option,
-                    )
-                    self.unit.status = BlockedStatus(
-                        f"Option {option} value {config_value} outside allowed range [1, {MAX_RETENTION_DAYS}]."
-                    )
-                continue
-
+        for option in AZURE_OPTIONS:
             # option possibly removed from the config
             # (e.g. 'juju config --reset <option>' or 'juju config <option>=""')
             if option not in self.config or self.config[option] == "":
@@ -120,52 +125,14 @@ class S3IntegratorCharm(ops.charm.CharmBase):
                     update_config.update({option: ""})
                 # skip in case of default value
                 continue
-            # manage comma-separated items for attributes
-            if option == "attributes":
-                values = self.config[option].split(",")
-                update_config.update({option: values})
-                self.set_secret("app", option, json.dumps(values))
-            # manage ca-chain
-            elif option == "tls-ca-chain":
-                ca_chain = self.parse_ca_chain(
-                    base64.b64decode(self.config[option]).decode("utf-8")
-                )
-                update_config.update({option: ca_chain})
-                self.set_secret("app", option, json.dumps(ca_chain))
-            else:
-                update_config.update({option: str(self.config[option])})
-                self.set_secret("app", option, str(self.config[option]))
 
-        if len(self.s3_provider.relations) > 0:
-            for relation in self.s3_provider.relations:
-                self.s3_provider.update_connection_info(relation.id, update_config)
+            update_config.update({option: str(self.config[option])})
+            self.set_secret("app", option, str(self.config[option]))
 
-    def _on_credential_requested(self, event: CredentialRequestedEvent):
-        """Handle the `credential-requested` event."""
-        if not self.unit.is_leader():
-            return
-        relation_id = event.relation.id
 
-        bucket = self.get_secret("app", "bucket") or event.bucket
-
-        logger.debug(f"Desired bucket name: {bucket}")
-        assert bucket is not None
-        # if bucket name is already specified ignore the one provided by the requirer app
-        if self.get_secret("app", bucket) is None:
-            self.set_secret("app", "bucket", bucket)
-
-        desired_configuration = {}
-        # collect all configuration options
-        for option in S3_OPTIONS:
-            if self.get_secret("app", option) is not None:
-                if option in S3_LIST_OPTIONS:
-                    # serialize lists options from json string
-                    desired_configuration[option] = json.loads(self.get_secret("app", option))
-                else:
-                    desired_configuration[option] = self.get_secret("app", option)
-
-        # update connection parameters in the relation data bug
-        self.s3_provider.update_connection_info(relation_id, desired_configuration)
+        if len(self.azure_provider.relations) > 0:
+            for relation in self.azure_provider.relations:
+                self.azure_provider.update_connection_info(relation.id, update_config)
 
     def get_secret(self, scope: str, key: str) -> Optional[str]:
         """Get secret from the secret storage."""
@@ -194,28 +161,25 @@ class S3IntegratorCharm(ops.charm.CharmBase):
     def get_missing_parameters(self) -> List[str]:
         """Returns the missing mandatory parameters that are not stored in the peer relation."""
         missing_options = []
-        for config_option in S3_MANDATORY_OPTIONS:
+        for config_option in AZURE_MANDATORY_OPTIONS:
             if not self.get_secret("app", config_option):
                 missing_options.append(config_option)
-        return missing_options
+        return missing_options 
 
-    def _on_sync_s3_credentials(self, event: ops.charm.ActionEvent) -> None:
-        """Handle a user synchronizing their S3 credentials to the charm."""
+    def _on_sync_azure_credentials(self, event: ops.charm.ActionEvent) -> None:
+        """Handle a user synchronizing their Azure credentials to the charm."""
         # only leader can write the new access and secret key into peer relation.
         if not self.unit.is_leader():
             event.fail("The action can be run only on leader unit.")
             return
         # read parameters from the event
-        access_key = event.params["access-key"]
         secret_key = event.params["secret-key"]
         # set parameters in the secrets
-        self.set_secret("app", "access-key", access_key)
         self.set_secret("app", "secret-key", secret_key)
         # update relation data if the relation is present
-        if len(self.s3_provider.relations) > 0:
-            for relation in self.s3_provider.relations:
-                self.s3_provider.set_access_key(relation.id, access_key)
-                self.s3_provider.set_secret_key(relation.id, secret_key)
+        if len(self.azure_provider.relations) > 0:
+            for relation in self.azure_provider.relations:
+                self.azure_provider.set_secret_key(relation.id, secret_key)
         credentials = {"ok": "Credentials successfully updated."}
         event.set_results(credentials)
 
@@ -232,13 +196,12 @@ class S3IntegratorCharm(ops.charm.CharmBase):
     @property
     def _peers(self):
         """Retrieve the peer relation."""
-        return self.model.get_relation(PEER)
+        return self.model.get_relation(PEER_RELATION_NAME)
 
     def on_get_credentials_action(self, event: ActionEvent):
         """Handle the action `get-credential`."""
-        access_key = self.get_secret("app", "access-key")
         secret_key = self.get_secret("app", "secret-key")
-        if access_key is None or secret_key is None:
+        if secret_key is None:
             event.fail("Credentials are not set!")
             return
         credentials = {"ok": "Credentials are configured."}
@@ -247,7 +210,7 @@ class S3IntegratorCharm(ops.charm.CharmBase):
     def on_get_connection_info_action(self, event: ActionEvent):
         """Handle the action `get connection info`."""
         current_configuration = {}
-        for option in S3_OPTIONS:
+        for option in AZURE_OPTIONS:
             if self.get_secret("app", option) is not None:
                 if option in KEYS_LIST:
                     current_configuration[option] = "************"  # Hide keys from configuration
@@ -261,32 +224,6 @@ class S3IntegratorCharm(ops.charm.CharmBase):
 
         event.set_results(current_configuration)
 
-    @staticmethod
-    def parse_ca_chain(ca_chain_pem: str) -> List[str]:
-        """Returns list of certificates based on a PEM CA Chain file.
-
-        Args:
-            ca_chain_pem (str): String containing list of certificates.
-            This string should look like:
-                -----BEGIN CERTIFICATE-----
-                <cert 1>
-                -----END CERTIFICATE-----
-                -----BEGIN CERTIFICATE-----
-                <cert 2>
-                -----END CERTIFICATE-----
-
-        Returns:
-            list: List of certificates
-        """
-        chain_list = re.findall(
-            pattern="(?=-----BEGIN CERTIFICATE-----)(.*?)(?<=-----END CERTIFICATE-----)",
-            string=ca_chain_pem,
-            flags=re.DOTALL,
-        )
-        if not chain_list:
-            raise ValueError("No certificate found in chain file")
-        return chain_list
-
 
 if __name__ == "__main__":
-    ops.main.main(S3IntegratorCharm)
+    ops.main.main(ObjectIntegratorCharm)

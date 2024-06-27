@@ -1,6 +1,6 @@
 # Copyright 2022 Canonical Ltd.
 # See LICENSE file for licensing details.
-name: application
+name: test-charm-azure
 description: |
   Data platform libs application charm used in integration tests.
 summary: |
@@ -8,7 +8,7 @@ summary: |
   only for testing of the libs in this repository.
 
 requires:
-  first-s3-credentials:
-    interface: s3
-  second-s3-credentials:
-    interface: s3
+  first-azure-credentials:
+    interface: azure
+  second-azure-credentials:
+    interface: azure

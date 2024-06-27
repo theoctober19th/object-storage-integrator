@@ -3,29 +3,21 @@
 
 """File containing constants to be used in the charm."""
 
-PEER = "s3-integrator-peers"
-S3_OPTIONS = [
-    "access-key",
-    "secret-key",
-    "region",
-    "storage-class",
-    "attributes",
-    "bucket",
-    "endpoint",
-    "path",
-    "s3-api-version",
-    "s3-uri-style",
-    "tls-ca-chain",
-    "delete-older-than-days",
-]
-S3_MANDATORY_OPTIONS = [
-    "access-key",
-    "secret-key",
-]
-S3_LIST_OPTIONS = ["attributes", "tls-ca-chain"]
-KEYS_LIST = ["access-key", "secret-key"]
-MAX_RETENTION_DAYS = 9999999
 
-
-S3_RELATION_NAME = "s3-credentials"
+PEER_RELATION_NAME = "object-storage-integrator-peers"
 AZURE_RELATION_NAME = "azure-credentials"
+
+
+AZURE_OPTIONS = [
+    "container",
+    "storage-account",
+    "secret-key",
+    "path"
+]
+AZURE_MANDATORY_OPTIONS = [
+    "container",
+    "storage-account",
+    "secret-key"
+]
+
+KEYS_LIST = ["secret-key"]
