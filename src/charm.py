@@ -12,7 +12,6 @@ import ops.framework
 import ops.lib
 import ops.main
 import ops.model
-from charms.data_platform_libs.v0.data_interfaces import DataPeer
 from charms.data_platform_libs.v0.object_storage import (
     AzureStorageProvides,
     CredentialRequestedEvent,
@@ -25,7 +24,6 @@ from constants import (
     AZURE_OPTIONS,
     AZURE_RELATION_NAME,
     KEYS_LIST,
-    PEER_RELATION_NAME,
 )
 
 logger = logging.getLogger(__name__)
@@ -39,9 +37,6 @@ class ObjectStorageIntegratorCharm(ops.charm.CharmBase):
     def __init__(self, *args) -> None:
         super().__init__(*args)
         self.azure_provider = AzureStorageProvides(self, AZURE_RELATION_NAME)
-        self.data_peer = DataPeer(
-            self, PEER_RELATION_NAME, additional_secret_fields=self.SECRET_FIELDS
-        )
 
         self.framework.observe(self.on.start, self._on_start)
         self.framework.observe(self.on.config_changed, self._on_config_changed)
@@ -57,27 +52,18 @@ class ObjectStorageIntegratorCharm(ops.charm.CharmBase):
             self.on.get_azure_connection_info_action, self.on_get_connection_info_action
         )
 
-    @property
-    def _peers(self):
-        """Retrieve the peer relation."""
-        return self.model.get_relation(PEER_RELATION_NAME)
-
-    @property
-    def app_peer_data(self) -> Dict:
-        """Return the peer relation data."""
-        return self.data_peer.fetch_my_relation_data()[self._peers.id]
 
     def get_missing_parameters(self) -> List[str]:
         """Returns the missing mandatory parameters that are not stored in the peer relation."""
         missing_options = []
-        logger.warning(f"peer data is: {self.data_peer.fetch_my_relation_data()}")
         for config_option in AZURE_MANDATORY_OPTIONS:
-            if not self.app_peer_data.get(config_option):
+            if not self.config.get(config_option):
                 missing_options.append(config_option)
         return missing_options
 
+
     def check_and_set_status(
-        self,
+        self, set_active_if_passed=False
     ) -> bool:
         """Check for missing parameters and set status of the unit."""
         missing_options = self.get_missing_parameters()
@@ -85,14 +71,14 @@ class ObjectStorageIntegratorCharm(ops.charm.CharmBase):
         if missing_options:
             self.unit.status = BlockedStatus(f"Missing parameters: {missing_options}")
             return
-        self.unit.status = ActiveStatus()
+        if set_active_if_passed:
+            self.unit.status = ActiveStatus()
+
 
     def _on_start(self, _: StartEvent) -> None:
         """Handle the charm startup event."""
-        missing_options = self.get_missing_parameters()
-        logger.info(f"Missing options: {missing_options}")
-        if missing_options:
-            self.unit.status = ops.model.BlockedStatus(f"Missing parameters: {missing_options}")
+        self.check_and_set_status()
+
 
     def decode_secret(self, secret_id: str, field: str) -> Optional[str]:
         try:
@@ -122,25 +108,17 @@ class ObjectStorageIntegratorCharm(ops.charm.CharmBase):
             # option possibly removed from the config
             # (e.g. 'juju config --reset <option>' or 'juju config <option>=""')
             if option not in self.config or self.config[option] == "":
-                # if option in KEYS_LIST:
-                #     logger.info("SECCU = %s", self.config[option])
-                #     logger.debug("Secret parameter %s not stored inside config.", option)
-                #     continue
-
-                if self.app_peer_data.get(option) is not None:
-                    update_config.update({option: ""})
 
                 # skip in case of default value
                 continue
 
             update_config.update({option: str(self.config[option])})
 
-        self.data_peer.update_relation_data(self._peers.id, update_config)
         if len(self.azure_provider.relations) > 0:
             for relation in self.azure_provider.relations:
                 self.azure_provider.update_relation_data(relation.id, update_config)
 
-        self.check_and_set_status()
+        self.check_and_set_status(set_active_if_passed=True)
 
 
     def _on_azure_credentials_requested(self, event: CredentialRequestedEvent):
@@ -148,39 +126,38 @@ class ObjectStorageIntegratorCharm(ops.charm.CharmBase):
         if not self.unit.is_leader():
             return
 
-        container_name = self.app_peer_data.get("container", event.container)
-
-        logger.debug(f"Desired container name: {container_name}")
+        container_name = self.config.get("container")
         assert container_name is not None
-        self.data_peer.update_relation_data(self._peers.id, {"container": container_name})
 
         desired_configuration = {}
         # collect all configuration options
         for option in AZURE_OPTIONS:
-            if self.app_peer_data.get(option):
-                desired_configuration[option] = self.app_peer_data.get(option)
+            if self.config.get(option):
+                desired_configuration[option] = self.config.get(option)
 
         # update connection parameters in the relation data bug
         self.azure_provider.update_relation_data(event.relation.id, desired_configuration)
 
+
     def on_get_credentials_action(self, event: ActionEvent):
         """Handle the action `get-credential`."""
-        secret_key = self.app_peer_data.get("secret-key")
+        secret_key = self.config.get("secret-key")
         if secret_key is None:
             event.fail("Credentials are not set!")
             return
         credentials = {"ok": "Credentials are configured."}
         event.set_results(credentials)
 
+
     def on_get_connection_info_action(self, event: ActionEvent):
         """Handle the action `get connection info`."""
         current_configuration = {}
         for option in AZURE_OPTIONS:
-            if self.app_peer_data.get(option):
+            if self.config.get(option):
                 if option in KEYS_LIST:
                     current_configuration[option] = "************"  # Hide keys from configuration
                 else:
-                    current_configuration[option] = self.app_peer_data.get(option)
+                    current_configuration[option] = self.config.get(option)
 
         # emit event fail if no option is set in the charm
         if len(current_configuration) == 0:

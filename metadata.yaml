@@ -23,9 +23,6 @@ website:
 maintainers:
   - Data Platform Team <data-platform@lists.launchpad.net>
 
-peers:
-  object-storage-integrator-peers:
-    interface: object-storage-integrator-peers
 
 provides:
   azure-credentials:
