@@ -11,7 +11,7 @@ the database requires-provides relation.
 import logging
 
 from charms.data_platform_libs.v0.object_storage import (
-    AzureStorageRequirer,
+    AzureStorageRequires,
     CredentialsChangedEvent,
     CredentialsGoneEvent,
 )
@@ -40,9 +40,9 @@ class ApplicationCharm(CharmBase):
         # Events related to the requested database
         # (these events are defined in the database requires charm library).
 
-        self.first_azure_client = AzureStorageRequirer(self, FIRST_RELATION)
-        self.second_azure_client = AzureStorageRequirer(
-            self, SECOND_RELATION, container_name=CONTAINER_NAME
+        self.first_azure_client = AzureStorageRequires(self, FIRST_RELATION)
+        self.second_azure_client = AzureStorageRequires(
+            self, SECOND_RELATION, container=CONTAINER_NAME
         )
 
         # add relation
@@ -66,6 +66,7 @@ class ApplicationCharm(CharmBase):
         self.framework.observe(
             self.second_azure_client.on.credentials_gone, self._on_second_credential_gone
         )
+        self.framework.observe(self.on.update_status, self.update_status)
 
     def _on_start(self, _) -> None:
         """Only sets an waiting status."""
@@ -99,6 +100,14 @@ class ApplicationCharm(CharmBase):
     def _peers(self):
         """Retrieve the peer relation (`ops.model.Relation`)."""
         return self.model.get_relation(PEER)
+
+    def update_status(self, _):
+        first_credentials = self.first_azure_client.get_azure_connection_info()
+        logger.info(f"first: {first_credentials}")
+        second_credentials = self.second_azure_client.get_azure_connection_info()
+        logger.info(f"second: {second_credentials}")
+
+        logger.info(f"third: {self.first_azure_client.fetch_relation_data()}")
 
 
 if __name__ == "__main__":

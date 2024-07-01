@@ -8,7 +8,7 @@ PEER_RELATION_NAME = "object-storage-integrator-peers"
 AZURE_RELATION_NAME = "azure-credentials"
 
 
-AZURE_OPTIONS = ["container", "storage-account", "secret-key", "path"]
-AZURE_MANDATORY_OPTIONS = ["container", "storage-account", "secret-key"]
+AZURE_OPTIONS = ["container", "storage-account", "secret-key", "path", "connection-protocol"]
+AZURE_MANDATORY_OPTIONS = ["container", "storage-account", "secret-key", "connection-protocol"]
 
 KEYS_LIST = ["secret-key"]

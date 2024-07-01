@@ -78,7 +78,10 @@ class TestCharm(unittest.TestCase):
         self.harness.charm.on_get_credentials_action(event)
         event.fail.assert_called()
 
-        self.harness.charm.app_peer_data["secret-key"] = "test-secret-key"
+        self.harness.charm.data_peer.update_relation_data(
+            self.harness.charm._peers.id, {"secret-key": "test-secret-key"}
+        )
+        # self.harness.charm.app_peer_data["secret-key"] = "test-secret-key"
 
         self.harness.charm.on_get_credentials_action(event)
         event.set_results.assert_called_with({"ok": "Credentials are configured."})
@@ -87,7 +90,9 @@ class TestCharm(unittest.TestCase):
         """Tests that Azure connection parameters are retrieved correctly."""
         self.harness.set_leader(True)
         event = mock.Mock()
-        self.harness.charm.app_peer_data["secret-key"] = "test-secret-key"
+        self.harness.charm.data_peer.update_relation_data(
+            self.harness.charm._peers.id, {"secret-key": "test-secret-key"}
+        )
         self.harness.charm.on_get_connection_info_action(event)
         event.set_results.assert_called_with({"secret-key": "************"})
         # update some configuration parameters
@@ -100,5 +105,6 @@ class TestCharm(unittest.TestCase):
                 "secret-key": "************",
                 "storage-account": "stoacc",
                 "path": "foo/bar",
+                "connection-protocol": "abfss"
             }
         )

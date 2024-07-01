@@ -14,6 +14,7 @@ from .helpers import (
     fetch_action_get_connection_info,
     fetch_action_sync_azure_credentials,
     get_application_data,
+    get_juju_secret,
     get_relation_data,
     is_relation_broken,
     is_relation_joined,
@@ -167,12 +168,14 @@ async def test_relation_creation(ops_test: OpsTest):
     logger.info(application_data)
 
     # check correctness for some fields
-    assert "secret-key" in application_data
+    assert "secret-extra" in application_data
     assert "container" in application_data
     assert application_data["container"] == "test-container"
-    assert application_data["secret-key"] == "new-test-secret-key"
     assert application_data["storage-account"] == "stoacc"
     assert application_data["path"] == "/test/path_1/"
+    secret_uri = application_data["secret-extra"]
+    secret_data = await get_juju_secret(ops_test, secret_uri)
+    assert secret_data["secret-key"] == "new-test-secret-key"
 
     # update container name and check if the change is propagated in the relation databag
     new_container_name = "new-container-name"
@@ -196,13 +199,16 @@ async def test_relation_creation(ops_test: OpsTest):
 
     # read data of the second relation
     application_data = await get_application_data(ops_test, TEST_APP_NAME, SECOND_RELATION)
-    assert "secret-key" in application_data
+    assert "secret-extra" in application_data
     assert "container" in application_data
     # check correctness of connection parameters in the relation databag
     assert application_data["container"] == new_container_name
-    assert application_data["secret-key"] == "new-test-secret-key"
     assert application_data["storage-account"] == "stoacc"
     assert application_data["path"] == "/test/path_1/"
+
+    secret_uri = application_data["secret-extra"]
+    secret_data = await get_juju_secret(ops_test, secret_uri)
+    assert secret_data["secret-key"] == "new-test-secret-key"
 
 
 @pytest.mark.group(1)

@@ -2,6 +2,7 @@
 # Copyright 2022 Canonical Ltd.
 # See LICENSE file for licensing details.
 
+import json
 import logging
 from typing import Dict, Optional
 
@@ -164,3 +165,11 @@ def get_certificate_from_file(filename: str) -> str:
     with open(filename, "r") as file:
         certificate = file.read()
     return certificate
+
+
+async def get_juju_secret(ops_test: OpsTest, secret_uri: str) -> Dict[str, str]:
+    """Retrieve juju secret."""
+    secret_unique_id = secret_uri.split("/")[-1]
+    complete_command = f"show-secret {secret_uri} --reveal --format=json"
+    _, stdout, _ = await ops_test.juju(*complete_command.split())
+    return json.loads(stdout)[secret_unique_id]["content"]["Data"]
