@@ -4,7 +4,7 @@
 """A charm of the s3 integrator service."""
 
 import logging
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 import ops
 import ops.charm
@@ -51,9 +51,6 @@ class ObjectStorageIntegratorCharm(ops.charm.CharmBase):
 
         # actions
         self.framework.observe(
-            self.on.sync_azure_credentials_action, self._on_sync_azure_credentials
-        )
-        self.framework.observe(
             self.on.get_azure_credentials_action, self.on_get_credentials_action
         )
         self.framework.observe(
@@ -97,17 +94,17 @@ class ObjectStorageIntegratorCharm(ops.charm.CharmBase):
         if missing_options:
             self.unit.status = ops.model.BlockedStatus(f"Missing parameters: {missing_options}")
 
-    # def decode_secret(self, secret_id: str, field: str) -> Optional[str]:
-    #     try:
-    #         secret_content = self.model.get_secret(id=secret_id).get_content()
-    #         if not secret_content.get(field):
-    #             raise ValueError(f"The field '{field}' was not found in the secret.")
-    #         return secret_content[field]
-    #     except ValueError as ve:
-    #         logger.warning(f"Exception in decoding secret: {ve}")
-    #     except ops.model.ModelError as me:
-    #         logger.warning(f"Exception in decoding secret: {me}")
-    #     return None
+    def decode_secret(self, secret_id: str, field: str) -> Optional[str]:
+        try:
+            secret_content = self.model.get_secret(id=secret_id).get_content()
+            if not secret_content.get(field):
+                raise ValueError(f"The field '{field}' was not found in the secret.")
+            return secret_content[field]
+        except ValueError as ve:
+            logger.warning(f"Exception in decoding secret: {ve}")
+        except ops.model.ModelError as me:
+            logger.warning(f"Exception in decoding secret: {me}")
+        return None
 
     def _on_config_changed(self, event: ConfigChangedEvent) -> None:  # noqa: C901
         """Event handler for configuration changed events."""
@@ -125,9 +122,10 @@ class ObjectStorageIntegratorCharm(ops.charm.CharmBase):
             # option possibly removed from the config
             # (e.g. 'juju config --reset <option>' or 'juju config <option>=""')
             if option not in self.config or self.config[option] == "":
-                if option in KEYS_LIST:
-                    logger.debug("Secret parameter %s not stored inside config.", option)
-                    continue
+                # if option in KEYS_LIST:
+                #     logger.info("SECCU = %s", self.config[option])
+                #     logger.debug("Secret parameter %s not stored inside config.", option)
+                #     continue
 
                 if self.app_peer_data.get(option) is not None:
                     update_config.update({option: ""})
@@ -144,24 +142,6 @@ class ObjectStorageIntegratorCharm(ops.charm.CharmBase):
 
         self.check_and_set_status()
 
-    def _on_sync_azure_credentials(self, event: ops.charm.ActionEvent) -> None:
-        """Handle a user synchronizing their Azure credentials to the charm."""
-        # only leader can write the new access and secret key into peer relation.
-        if not self.unit.is_leader():
-            event.fail("The action can be run only on leader unit.")
-            return
-        # read parameters from the event
-        secret_key = event.params["secret-key"]
-        # set parameters in the peer relation data
-        # self.data_peer.update_relation_data(self._peers.id, {"goku": "choku"})
-        self.data_peer.update_relation_data(self._peers.id, {"secret-key": secret_key})
-        # update relation data if the relation is present
-        if len(self.azure_provider.relations) > 0:
-            for relation in self.azure_provider.relations:
-                self.azure_provider.set_secret_key(relation.id, secret_key)
-        credentials = {"ok": "Credentials successfully updated."}
-        self.check_and_set_status()
-        event.set_results(credentials)
 
     def _on_azure_credentials_requested(self, event: CredentialRequestedEvent):
         """Handle the `credential-requested` event for azure storage."""

@@ -1,13 +1,13 @@
 # Copyright 2022 Canonical Ltd.
 # SPDX-License-Identifier: Apache-2.0
 
-sync-azure-credentials:
-  description: Synchronize Azure Storage credentials
-  params:
-    secret-key:
-      type: string
-      description: Access Key Secret (password) for the Azure Storage account.
-  required: [secret-key]
+# sync-azure-credentials:
+#   description: Synchronize Azure Storage credentials
+#   params:
+#     secret-key:
+#       type: string
+#       description: Access Key Secret (password) for the Azure Storage account.
+#   required: [secret-key]
 
 
 get-azure-credentials:
