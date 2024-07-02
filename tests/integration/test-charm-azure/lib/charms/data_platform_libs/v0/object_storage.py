@@ -38,23 +38,15 @@ LIBPATCH = 1
 
 logger = logging.getLogger(__name__)
 
-Diff = namedtuple("Diff", "added changed deleted")
-Diff.__doc__ = """
-A tuple for storing the diff between two data mappings.
 
-added - keys that were added
-changed - keys that still exist but have new values
-deleted - key that were deleted"""
-
-
-AZURE_STORAGE_REQUIRED_OPTIONS = ["container", "storage-account", "secret-key", "connection-protocol"]
+AZURE_STORAGE_REQUIRED_INFO = ["container", "storage-account", "secret-key", "connection-protocol"]
 
 
 class ObjectStorageEvent(RelationEvent):
     pass
 
 
-class ContainerEvent(RelationEvent):
+class ContainerEvent(ObjectStorageEvent):
     """Base class for Azure storage events."""
 
     @property
@@ -79,11 +71,13 @@ class CredentialsGoneEvent(RelationEvent):
 
 
 class AzureStorageProviderEvents(CharmEvents):
+    """Events for the AzureStorageProvider side implementation."""
+
     credentials_requested = EventSource(CredentialRequestedEvent)
 
 
-class AzureStorageRequirerEvents(ObjectEvents):
-    """Event descriptor for events raised by the AzureStorageProvider."""
+class AzureStorageRequirerEvents(CharmEvents):
+    """Events for the AzureStorageRequirer side implementation."""
 
     credentials_changed = EventSource(CredentialsChangedEvent)
     credentials_gone = EventSource(CredentialsGoneEvent)
@@ -91,24 +85,22 @@ class AzureStorageRequirerEvents(ObjectEvents):
 
 class AzureStorageRequirerData(RequirerData):
     SECRET_FIELDS = ["secret-key"]
-    # ADDITIONAL_SECRET_FIELDS = ["secret-key"]
 
     def __init__(self, model, relation_name: str, container: Optional[str] = None):
         super().__init__(
             model,
             relation_name,
-            # additional_secret_fields=self.ADDITIONAL_SECRET_FIELDS
         )
         self.container = container
 
 
 class AzureStorageRequirerEventHandlers(RequirerEventHandlers):
+    """Event handlers for for requirer side of Azure Storage relation."""
+
     on = AzureStorageRequirerEvents()  # pyright: ignore[reportAssignmentType]
 
-    def __init__(
-        self, charm: CharmBase, relation_data: AzureStorageRequirerData, unique_key: str = ""
-    ):
-        super().__init__(charm, relation_data, unique_key)
+    def __init__(self, charm: CharmBase, relation_data: AzureStorageRequirerData):
+        super().__init__(charm, relation_data)
 
         self.relation_name = relation_data.relation_name
         self.charm = charm
@@ -128,15 +120,15 @@ class AzureStorageRequirerEventHandlers(RequirerEventHandlers):
         )
 
     def _on_relation_joined_event(self, event: RelationJoinedEvent) -> None:
-        """Event emitted when the azure storage relation is joined."""
-        logger.info("Azure storage relation joined...")
+        """Event emitted when the Azure Storage relation is joined."""
+        logger.info(f"Azure storage relation ({event.relation.name}) joined...")
         if self.container is None:
             self.container = f"relation-{event.relation.id}"
         event_data = {"container": self.container}
         self.relation_data.update_relation_data(event.relation.id, event_data)
 
     def get_azure_connection_info(self) -> Dict[str, str]:
-        """Return the azure storage credentials as a dictionary."""
+        """Return the azure storage connection info as a dictionary."""
         for relation in self.relations:
             if relation and relation.app:
                 return self.relation_data.fetch_relation_data([relation.id])[relation.id]
@@ -146,19 +138,15 @@ class AzureStorageRequirerEventHandlers(RequirerEventHandlers):
         """Notify the charm about the presence of Azure credentials."""
         logger.info(f"Azure storage relation ({event.relation.name}) changed...")
 
-        ##############################################################################
         diff = self._diff(event)
         if any(newval for newval in diff.added if self.relation_data._is_secret_field(newval)):
             self.relation_data._register_secrets_to_relation(event.relation, diff.added)
-        ##############################################################################
 
         # check if the mandatory options are in the relation data
         contains_required_options = True
-        # get current credentials data
         credentials = self.get_azure_connection_info()
-        # records missing options
         missing_options = []
-        for configuration_option in AZURE_STORAGE_REQUIRED_OPTIONS:
+        for configuration_option in AZURE_STORAGE_REQUIRED_INFO:
             if configuration_option not in credentials:
                 contains_required_options = False
                 missing_options.append(configuration_option)
@@ -174,14 +162,14 @@ class AzureStorageRequirerEventHandlers(RequirerEventHandlers):
             )
 
     def _on_secret_changed_event(self, event: SecretChangedEvent):
-        """Event notifying about a new value of a secret."""
+        """Event handler for handling a new value of a secret."""
         if not event.secret.label:
             return
 
         relation = self.relation_data._relation_from_secret_label(event.secret.label)
         if not relation:
             logging.info(
-                f"Received secret {event.secret.label} but couldn't parse, seems irrelevant"
+                f"Received secret {event.secret.label} but couldn't parse, seems irrelevant."
             )
             return
 
@@ -195,11 +183,9 @@ class AzureStorageRequirerEventHandlers(RequirerEventHandlers):
 
         # check if the mandatory options are in the relation data
         contains_required_options = True
-        # get current credentials data
         credentials = self.get_azure_connection_info()
-        # records missing options
         missing_options = []
-        for configuration_option in AZURE_STORAGE_REQUIRED_OPTIONS:
+        for configuration_option in AZURE_STORAGE_REQUIRED_INFO:
             if configuration_option not in credentials:
                 contains_required_options = False
                 missing_options.append(configuration_option)
@@ -214,8 +200,8 @@ class AzureStorageRequirerEventHandlers(RequirerEventHandlers):
                 f"Some mandatory fields: {missing_options} are not present, do not emit credential change event!"
             )
 
-
     def _on_relation_broken_event(self, event: RelationBrokenEvent) -> None:
+        """Event handler for handling relation_broken event."""
         logger.info("Azure Storage relation broken...")
         getattr(self.on, "credentials_gone").emit(event.relation, app=event.app, unit=event.unit)
 
@@ -226,6 +212,7 @@ class AzureStorageRequirerEventHandlers(RequirerEventHandlers):
 
 
 class AzureStorageRequires(AzureStorageRequirerData, AzureStorageRequirerEventHandlers):
+    """The requirer side of Azure Storage relation."""
 
     def __init__(
         self,
@@ -238,6 +225,7 @@ class AzureStorageRequires(AzureStorageRequirerData, AzureStorageRequirerEventHa
 
 
 class AzureStorageProviderData(ProviderData):
+    """The Data abstraction of the provider side of Azure storage relation."""
 
     def __init__(self, model: Model, relation_name: str) -> None:
         super().__init__(model, relation_name)
@@ -250,6 +238,8 @@ class AzureStorageProviderData(ProviderData):
 
 
 class AzureStorageProviderEventHandlers(EventHandlers):
+    """The event handlers related to provider side of Azure Storage relation."""
+
     on = AzureStorageProviderEvents()
 
     def __init__(
@@ -267,6 +257,7 @@ class AzureStorageProviderEventHandlers(EventHandlers):
 
 
 class AzureStorageProvides(AzureStorageProviderData, AzureStorageProviderEventHandlers):
+    """The provider side of the Azure Storage relation."""
 
     def __init__(self, charm: CharmBase, relation_name: str) -> None:
         AzureStorageProviderData.__init__(self, charm.model, relation_name)

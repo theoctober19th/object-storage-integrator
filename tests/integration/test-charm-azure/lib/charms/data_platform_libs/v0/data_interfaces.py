@@ -507,8 +507,7 @@ def juju_secrets_only(f):
 
 
 def dynamic_secrets_only(f):
-    """Decorator to ensure that certain operations would be only executed when NO static
-    secrets are defined."""
+    """Decorator to ensure that certain operations would be only executed when NO static secrets are defined."""
 
     def wrapper(self, *args, **kwargs):
         if self.static_secret_fields:
@@ -536,19 +535,16 @@ def either_static_or_dynamic_secrets(f):
 
 
 def backwards_compatibility_limit(version: int) -> None:
-    """EXPERIMENTAL! Set the version number starting from which backwards compatibility
-    actions should be executed.
+    """EXPERIMENTAL! Set the version number starting from which backwards compatibility actions should be executed.
 
     This feature is currently EXPERIMENTAL. USE IT AT YOUR OWN RISK.
 
-    Typically when having a new major version of a charm (i.e. "blank page", "no legacy"),
-    the charm could pin down the version of the lib that is be used as a starting point.
-    No earlier migrations or compatibility is needed. This can simplify the execution flows,
-    and avoid any unnecessary overhead.
+    Typically when having a new major version of a charm (i.e. "blank page", "no legacy"), the charm could pin down
+    the version of the lib that is be used as a starting point. No earlier migrations or compatibility is needed.
+    This can simplify the execution flows, and avoid any unnecessary overhead.
     """
     logging.warning(
-        "Setting backward compatibility is EXPERIMENTAL. "
-        "We recommend to use it once it's considered stable."
+        "Setting backward compatibility is EXPERIMENTAL. We recommend to use it once it's considered stable."
     )
     global LEGACY_SUPPORT_FROM
     LEGACY_SUPPORT_FROM = version
@@ -792,8 +788,7 @@ class CachedSecret:
             self.meta.remove_all_revisions()
 
     def get_info(self) -> Optional[SecretInfo]:
-        """Wrapper function to apply the corresponding call on the Secret object
-        within CachedSecret if any."""
+        """Wrapper function to apply the corresponding call on the Secret object within CachedSecret if any."""
         if self.meta:
             return self.meta.get_info()
 
@@ -888,8 +883,7 @@ class DataDict(UserDict):
         """Get an item of the Abstract Relation Data dictionary."""
         result = None
 
-        # Avoiding "leader_only" error when cross-charm non-leader unit,
-        # not to report useless error
+        # Avoiding "leader_only" error when cross-charm non-leader unit, not to report useless error
         if (
             not hasattr(self.relation_data.fetch_my_relation_field, "leader_only")
             or self.relation_data.component != self.relation_data.local_app
@@ -1037,20 +1031,17 @@ class Data(ABC):
     def _fetch_my_specific_relation_data(
         self, relation: Relation, fields: Optional[List[str]]
     ) -> Dict[str, str]:
-        """Fetch data available (directily or indirectly -- i.e. secrets)
-        from the relation for owner/this_app."""
+        """Fetch data available (directily or indirectly -- i.e. secrets) from the relation for owner/this_app."""
         raise NotImplementedError
 
     @abstractmethod
     def _update_relation_data(self, relation: Relation, data: Dict[str, str]) -> None:
-        """Update data available (directily or indirectly -- i.e. secrets)
-        from the relation for owner/this_app."""
+        """Update data available (directily or indirectly -- i.e. secrets) from the relation for owner/this_app."""
         raise NotImplementedError
 
     @abstractmethod
     def _delete_relation_data(self, relation: Relation, fields: List[str]) -> None:
-        """Delete data available (directily or indirectly -- i.e. secrets)
-        from the relation for owner/this_app."""
+        """Delete data available (directily or indirectly -- i.e. secrets) from the relation for owner/this_app."""
         raise NotImplementedError
 
     # Optional overrides
@@ -1146,9 +1137,7 @@ class Data(ABC):
     def _content_for_secret_group(
         self, content: Dict[str, str], secret_fields: Set[str], group_mapping: SecretGroup
     ) -> Dict[str, str]:
-        """
-        Select <field>: <value> pairs from input, that belong to this particular Secret group.
-        """
+        """Select <field>: <value> pairs from input, that belong to this particular Secret group."""
         if group_mapping == SECRET_GROUPS.EXTRA:
             return {
                 k: v
@@ -1171,10 +1160,8 @@ class Data(ABC):
         if secret:
             return secret.get_content()
 
-    # Core operations on Relation Fields manipulations
-    # (regardless whether the field is in the databag or in a secret)
-    # Internal functions to be called directly from transparent public interface functions
-    # (+closely related helpers)
+    # Core operations on Relation Fields manipulations (regardless whether the field is in the databag or in a secret)
+    # Internal functions to be called directly from transparent public interface functions (+closely related helpers)
 
     def _process_secret_fields(
         self,
@@ -1185,15 +1172,12 @@ class Data(ABC):
         *args,
         **kwargs,
     ) -> Tuple[Dict[str, str], Set[str]]:
-        """Isolate target secret fields of manipulation,
-        and execute requested operation by Secret Group."""
+        """Isolate target secret fields of manipulation, and execute requested operation by Secret Group."""
         result = {}
 
         # If the relation started on a databag, we just stay on the databag
-        # (Rolling upgrades may result in a relation starting on databag,
-        # getting secrets enabled on-the-fly)
-        # self.local_app is sufficient to check
-        # (ignored if Requires, never has secrets -- works if Provider)
+        # (Rolling upgrades may result in a relation starting on databag, getting secrets enabled on-the-fly)
+        # self.local_app is sufficient to check (ignored if Requires, never has secrets -- works if Provider)
         fallback_to_databag = (
             req_secret_fields
             and (self.local_unit == self._model.unit and self.local_unit.is_leader())
@@ -1210,8 +1194,7 @@ class Data(ABC):
             for group in secret_fieldnames_grouped:
                 # operation() should return nothing when all goes well
                 if group_result := operation(relation, group, secret_fields, *args, **kwargs):
-                    # If "meaningful" data was returned, we take it.
-                    # (Some 'operation'-s only return success/failure.)
+                    # If "meaningful" data was returned, we take it. (Some 'operation'-s only return success/failure.)
                     if isinstance(group_result, dict):
                         result.update(group_result)
                 else:
@@ -1270,8 +1253,7 @@ class Data(ABC):
                 relation, req_secret_fields, fields, self._get_group_secret_contents
             )
 
-        # Processing "normal" fields.
-        # May include leftover from what we couldn't retrieve as a secret.
+        # Processing "normal" fields. May include leftover from what we couldn't retrieve as a secret.
         # (Typically when Juju3 Requires meets Juju2 Provider)
         if normal_fields:
             result.update(
@@ -1301,10 +1283,7 @@ class Data(ABC):
                 relation.data[component].pop(field)
             except KeyError:
                 logger.debug(
-                    (
-                        "Non-existing field '%s' was attempted to be removed from the databag "
-                        "(relation ID: %s)"
-                    ),
+                    "Non-existing field '%s' was attempted to be removed from the databag (relation ID: %s)",
                     str(field),
                     str(relation.id),
                 )
@@ -1624,8 +1603,7 @@ class ProviderData(Data):
     ) -> Dict[str, str]:
         """Fetching relation data for Provider.
 
-        NOTE: Since all secret fields are in the Provider side of the databag,
-        we don't need to worry about that
+        NOTE: Since all secret fields are in the Provider side of the databag, we don't need to worry about that
         """
         if not relation.app:
             return {}
@@ -2000,8 +1978,7 @@ class DataPeerData(RequirerData, ProviderData):
 
     @property
     def current_secret_fields(self) -> List[str]:
-        """Helper method to get all currently existing secret fields
-        (added statically or dynamically)."""
+        """Helper method to get all currently existing secret fields (added statically or dynamically)."""
         if not self.secrets_enabled:
             return []
 
@@ -2033,8 +2010,7 @@ class DataPeerData(RequirerData, ProviderData):
             relation_id: ID of the relation
             field: The secret field that is to be added
             value: The string value of the secret
-            group_mapping: The name of the "secret group",
-            in case the field is to be added to an existing secret
+            group_mapping: The name of the "secret group", in case the field is to be added to an existing secret
         """
         self._legacy_apply_on_update([field])
 
@@ -2119,9 +2095,7 @@ class DataPeerData(RequirerData, ProviderData):
     def _content_for_secret_group(
         self, content: Dict[str, str], secret_fields: Set[str], group_mapping: SecretGroup
     ) -> Dict[str, str]:
-        """
-        Select <field>: <value> pairs from input, that belong to this particular Secret group.
-        """
+        """Select <field>: <value> pairs from input, that belong to this particular Secret group."""
         if group_mapping == SECRET_GROUPS.EXTRA:
             return {k: v for k, v in content.items() if k in self.secret_fields}
         return {
@@ -2131,8 +2105,7 @@ class DataPeerData(RequirerData, ProviderData):
         }
 
     def valid_field_pattern(self, field: str, full_field: str) -> bool:
-        """Check that no secret group is attempted to be used together without secrets being
-        enabled.
+        """Check that no secret group is attempted to be used together without secrets being enabled.
 
         Secrets groups are impossible to use with versions that are not yet supporting secrets.
         """
@@ -2197,8 +2170,7 @@ class DataPeerData(RequirerData, ProviderData):
         current_data = self.fetch_my_relation_data([relation.id], fields)
         if current_data is not None:
             # Check if the secret we wanna delete actually exists
-            # Given the "deleted label", here we can't rely on the default mechanism
-            # (i.e. 'key not found')
+            # Given the "deleted label", here we can't rely on the default mechanism (i.e. 'key not found')
             if non_existent := (set(fields) & set(self.secret_fields)) - set(
                 current_data.get(relation.id, [])
             ):
@@ -2362,16 +2334,14 @@ class DataPeerData(RequirerData, ProviderData):
     def _fetch_my_specific_relation_data(
         self, relation: Relation, fields: Optional[List[str]]
     ) -> Dict[str, str]:
-        """Fetch data available (directily or indirectly -- i.e. secrets)
-        from the relation for owner/this_app."""
+        """Fetch data available (directily or indirectly -- i.e. secrets) from the relation for owner/this_app."""
         return self._fetch_relation_data_with_secrets(
             self.component, self.secret_fields, relation, fields
         )
 
     @either_static_or_dynamic_secrets
     def _update_relation_data(self, relation: Relation, data: Dict[str, str]) -> None:
-        """Update data available (directily or indirectly -- i.e. secrets)
-        from the relation for owner/this_app."""
+        """Update data available (directily or indirectly -- i.e. secrets) from the relation for owner/this_app."""
         _, normal_fields = self._process_secret_fields(
             relation,
             self.secret_fields,
@@ -2386,8 +2356,7 @@ class DataPeerData(RequirerData, ProviderData):
 
     @either_static_or_dynamic_secrets
     def _delete_relation_data(self, relation: Relation, fields: List[str]) -> None:
-        """Delete data available (directily or indirectly -- i.e. secrets)
-        from the relation for owner/this_app."""
+        """Delete data available (directily or indirectly -- i.e. secrets) from the relation for owner/this_app."""
         if self.secret_fields and self.deleted_label:
 
             _, normal_fields = self._process_secret_fields(
@@ -2902,8 +2871,7 @@ class DatabaseProviderEventHandlers(EventHandlers):
     ):
         """Manager of base client relations."""
         super().__init__(charm, relation_data, unique_key)
-        # Just to calm down pyright, it can't parse that the same type is being used in the
-        # super() call above
+        # Just to calm down pyright, it can't parse that the same type is being used in the super() call above
         self.relation_data = relation_data
 
     def _on_relation_changed_event(self, event: RelationChangedEvent) -> None:
@@ -3009,8 +2977,7 @@ class DatabaseRequirerEventHandlers(RequirerEventHandlers):
     ):
         """Manager of base client relations."""
         super().__init__(charm, relation_data, unique_key)
-        # Just to keep lint quiet, can't resolve inheritance.
-        # The same happened in super().__init__() above
+        # Just to keep lint quiet, can't resolve inheritance. The same happened in super().__init__() above
         self.relation_data = relation_data
 
         # Define custom event names for each alias.
@@ -3022,9 +2989,8 @@ class DatabaseRequirerEventHandlers(RequirerEventHandlers):
             ].limit
             if len(self.relation_data.relations_aliases) != relation_connection_limit:
                 raise ValueError(
-                    "The number of aliases must match the maximum number of connections allowed "
-                    f"in the relation. Expected {relation_connection_limit}, got "
-                    f"{len(self.relation_data.relations_aliases)}"
+                    f"The number of aliases must match the maximum number of connections allowed in the relation. "
+                    f"Expected {relation_connection_limit}, got {len(self.relation_data.relations_aliases)}"
                 )
 
         if self.relation_data.relations_aliases:
@@ -3358,8 +3324,7 @@ class KafkaProviderEventHandlers(EventHandlers):
 
     def __init__(self, charm: CharmBase, relation_data: KafkaProviderData) -> None:
         super().__init__(charm, relation_data)
-        # Just to keep lint quiet, can't resolve inheritance.
-        # The same happened in super().__init__() above
+        # Just to keep lint quiet, can't resolve inheritance. The same happened in super().__init__() above
         self.relation_data = relation_data
 
     def _on_relation_changed_event(self, event: RelationChangedEvent) -> None:
@@ -3424,8 +3389,7 @@ class KafkaRequirerEventHandlers(RequirerEventHandlers):
 
     def __init__(self, charm: CharmBase, relation_data: KafkaRequirerData) -> None:
         super().__init__(charm, relation_data)
-        # Just to keep lint quiet, can't resolve inheritance.
-        # The same happened in super().__init__() above
+        # Just to keep lint quiet, can't resolve inheritance. The same happened in super().__init__() above
         self.relation_data = relation_data
 
     def _on_relation_created_event(self, event: RelationCreatedEvent) -> None:
@@ -3602,8 +3566,7 @@ class OpenSearchProvidesEventHandlers(EventHandlers):
 
     def __init__(self, charm: CharmBase, relation_data: OpenSearchProvidesData) -> None:
         super().__init__(charm, relation_data)
-        # Just to keep lint quiet, can't resolve inheritance.
-        # The same happened in super().__init__() above
+        # Just to keep lint quiet, can't resolve inheritance. The same happened in super().__init__() above
         self.relation_data = relation_data
 
     def _on_relation_changed_event(self, event: RelationChangedEvent) -> None:
@@ -3653,8 +3616,7 @@ class OpenSearchRequiresEventHandlers(RequirerEventHandlers):
 
     def __init__(self, charm: CharmBase, relation_data: OpenSearchRequiresData) -> None:
         super().__init__(charm, relation_data)
-        # Just to keep lint quiet, can't resolve inheritance.
-        # The same happened in super().__init__() above
+        # Just to keep lint quiet, can't resolve inheritance. The same happened in super().__init__() above
         self.relation_data = relation_data
 
     def _on_relation_created_event(self, event: RelationCreatedEvent) -> None:

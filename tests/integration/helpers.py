@@ -27,35 +27,6 @@ async def fetch_action_get_credentials(unit: Unit) -> Dict:
     return result.results
 
 
-async def fetch_action_get_connection_info(unit: Unit) -> Dict:
-    """Helper to run an action to fetch connection info.
-
-    Args:
-        unit: The juju unit on which to run the get_connection_info action for credentials
-    Returns:
-        A dictionary with the server config username and password
-    """
-    action = await unit.run_action(action_name="get-azure-connection-info")
-    result = await action.wait()
-    return result.results
-
-
-async def fetch_action_sync_azure_credentials(unit: Unit, secret_key: str) -> Dict:
-    """Helper to run an action to sync credentials.
-
-    Args:
-        unit: The juju unit on which to run the get-password action for credentials
-        secret_key: the secret key to access the s3 compatible endpoint
-    Returns:
-        A dictionary with the server config username and password
-    """
-    parameters = {"secret-key": secret_key}
-    action = await unit.run_action(action_name="sync-azure-credentials", **parameters)
-    result = await action.wait()
-
-    return result.results
-
-
 def is_relation_joined(ops_test: OpsTest, endpoint_one: str, endpoint_two: str) -> bool:
     """Check if a relation is joined.
 
@@ -175,12 +146,11 @@ async def get_juju_secret(ops_test: OpsTest, secret_uri: str) -> Dict[str, str]:
     return json.loads(stdout)[secret_unique_id]["content"]["Data"]
 
 
-async def add_juju_secret(ops_test: OpsTest, charm_name: str, secret_label: str, data: Dict[str, str]) -> str:
+async def add_juju_secret(
+    ops_test: OpsTest, charm_name: str, secret_label: str, data: Dict[str, str]
+) -> str:
     """Retrieve juju secret."""
-    key_values = " ".join([
-        f"{key}={value}"
-        for key, value in data.items()
-    ])
+    key_values = " ".join([f"{key}={value}" for key, value in data.items()])
     command = f"add-secret {secret_label} {key_values}"
     _, stdout, _ = await ops_test.juju(*command.split())
     secret_uri = stdout.strip()

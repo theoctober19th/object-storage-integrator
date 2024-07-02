@@ -92,11 +92,11 @@ class ApplicationCharm(CharmBase):
         logger.info(f"Relation_2 credentials changed. New credentials: {credentials}")
 
     def _on_first_credential_gone(self, _: CredentialsGoneEvent):
-        logger.info(f"Relation_1 credentials gone...")
+        logger.info("Relation_1 credentials gone...")
         self.unit.status = WaitingStatus("Waiting for relation")
 
     def _on_second_credential_gone(self, _: CredentialsGoneEvent):
-        logger.info(f"Relation_2 credentials gone...")
+        logger.info("Relation_2 credentials gone...")
         self.unit.status = WaitingStatus("Waiting for relation")
 
     @property
@@ -111,7 +111,6 @@ class ApplicationCharm(CharmBase):
     #     logger.info(f"second: {second_credentials}")
 
     #     logger.info(f"third: {self.first_azure_client.fetch_relation_data()}")
-
 
 
 if __name__ == "__main__":

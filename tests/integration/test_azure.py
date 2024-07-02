@@ -11,14 +11,12 @@ import yaml
 from pytest_operator.plugin import OpsTest
 
 from .helpers import (
-    fetch_action_get_connection_info,
-    fetch_action_sync_azure_credentials,
+    add_juju_secret,
     get_application_data,
     get_juju_secret,
     get_relation_data,
     is_relation_broken,
     is_relation_joined,
-    add_juju_secret,
 )
 
 logger = logging.getLogger(__name__)
@@ -82,19 +80,21 @@ async def test_build_and_deploy(ops_test: OpsTest):
     assert len(ops_test.model.applications[TEST_APP_NAME].units) == 1
 
 
-
 @pytest.mark.group(1)
 @pytest.mark.abort_on_fail
 async def test_config_options(ops_test: OpsTest):
     """Tests the correct handling of configuration parameters."""
     secret_uri = await add_juju_secret(
-        ops_test, charm_name=CHARM_NAME, secret_label="test-secret", data={"secret-key": "new-test-secret-key"}
+        ops_test,
+        charm_name=CHARM_NAME,
+        secret_label="test-secret",
+        data={"secret-key": "new-test-secret-key"},
     )
     configuration_parameters = {
         "storage-account": "stoacc",
         "path": "/test/path_1/",
         "container": "test-container",
-        "credentials": secret_uri
+        "credentials": secret_uri,
     }
     # apply new configuration options
     await ops_test.model.applications[CHARM_NAME].set_config(configuration_parameters)
@@ -111,8 +111,6 @@ async def test_config_options(ops_test: OpsTest):
     assert configured_options["storage-account"] == "stoacc"
     assert configured_options["path"] == "/test/path_1/"
     assert configured_options["credentials"] == secret_uri
-
-
 
 
 @pytest.mark.group(1)

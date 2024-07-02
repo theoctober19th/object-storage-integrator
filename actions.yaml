@@ -1,9 +1,5 @@
 # Copyright 2022 Canonical Ltd.
 # SPDX-License-Identifier: Apache-2.0
 
-
-get-azure-credentials:
-  description: Returns Azure credentials (access-key)
-
 get-azure-connection-info:
   description: Returns Azure connection parameters
