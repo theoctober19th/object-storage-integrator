@@ -173,3 +173,17 @@ async def get_juju_secret(ops_test: OpsTest, secret_uri: str) -> Dict[str, str]:
     complete_command = f"show-secret {secret_uri} --reveal --format=json"
     _, stdout, _ = await ops_test.juju(*complete_command.split())
     return json.loads(stdout)[secret_unique_id]["content"]["Data"]
+
+
+async def add_juju_secret(ops_test: OpsTest, charm_name: str, secret_label: str, data: Dict[str, str]) -> str:
+    """Retrieve juju secret."""
+    key_values = " ".join([
+        f"{key}={value}"
+        for key, value in data.items()
+    ])
+    command = f"add-secret {secret_label} {key_values}"
+    _, stdout, _ = await ops_test.juju(*command.split())
+    secret_uri = stdout.strip()
+    command = f"grant-secret {secret_label} {charm_name}"
+    _, stdout, _ = await ops_test.juju(*command.split())
+    return secret_uri

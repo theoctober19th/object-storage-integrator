@@ -36,6 +36,7 @@ class ApplicationCharm(CharmBase):
 
         # Default charm events.
         self.framework.observe(self.on.start, self._on_start)
+        # self.framework.observe(self.on.secret_changed, self._on_secret_changed)
 
         # Events related to the requested database
         # (these events are defined in the database requires charm library).
@@ -66,7 +67,7 @@ class ApplicationCharm(CharmBase):
         self.framework.observe(
             self.second_azure_client.on.credentials_gone, self._on_second_credential_gone
         )
-        self.framework.observe(self.on.update_status, self.update_status)
+        # self.framework.observe(self.on.update_status, self.update_status)
 
     def _on_start(self, _) -> None:
         """Only sets an waiting status."""
@@ -74,26 +75,28 @@ class ApplicationCharm(CharmBase):
 
     def _on_first_relation_joined(self, _: RelationJoinedEvent):
         """On Azure credential relation joined."""
+        logger.info("Relation_1 joined...")
         self.unit.status = ActiveStatus()
 
     def _on_second_relation_joined(self, _: RelationJoinedEvent):
         """On s3 credential relation joined."""
+        logger.info("Relation_2 joined...")
         self.unit.status = ActiveStatus()
 
     def _on_first_credential_changed(self, e: CredentialsChangedEvent):
         credentials = self.first_azure_client.get_azure_connection_info()
-        logger.info(f"First Azure credential info: {credentials}")
+        logger.info(f"Relation_1 credentials changed. New credentials: {credentials}")
 
     def _on_second_credential_changed(self, e: CredentialsChangedEvent):
         credentials = self.second_azure_client.get_azure_connection_info()
-        logger.info(f"Second Azure credential info: {credentials}")
+        logger.info(f"Relation_2 credentials changed. New credentials: {credentials}")
 
     def _on_first_credential_gone(self, _: CredentialsGoneEvent):
-        logger.info("appcharm: first Azure relation credentials GONE!")
+        logger.info(f"Relation_1 credentials gone...")
         self.unit.status = WaitingStatus("Waiting for relation")
 
     def _on_second_credential_gone(self, _: CredentialsGoneEvent):
-        logger.info("appcharm: second Azure relation credentials GONE!")
+        logger.info(f"Relation_2 credentials gone...")
         self.unit.status = WaitingStatus("Waiting for relation")
 
     @property
@@ -101,13 +104,14 @@ class ApplicationCharm(CharmBase):
         """Retrieve the peer relation (`ops.model.Relation`)."""
         return self.model.get_relation(PEER)
 
-    def update_status(self, _):
-        first_credentials = self.first_azure_client.get_azure_connection_info()
-        logger.info(f"first: {first_credentials}")
-        second_credentials = self.second_azure_client.get_azure_connection_info()
-        logger.info(f"second: {second_credentials}")
+    # def update_status(self, _):
+    #     first_credentials = self.first_azure_client.get_azure_connection_info()
+    #     logger.info(f"first: {first_credentials}")
+    #     second_credentials = self.second_azure_client.get_azure_connection_info()
+    #     logger.info(f"second: {second_credentials}")
 
-        logger.info(f"third: {self.first_azure_client.fetch_relation_data()}")
+    #     logger.info(f"third: {self.first_azure_client.fetch_relation_data()}")
+
 
 
 if __name__ == "__main__":

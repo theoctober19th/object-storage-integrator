@@ -40,6 +40,10 @@ class ObjectStorageIntegratorCharm(ops.charm.CharmBase):
 
         self.framework.observe(self.on.start, self._on_start)
         self.framework.observe(self.on.config_changed, self._on_config_changed)
+        self.framework.observe(self.on.secret_changed, self._on_secret_changed)
+        self.framework.observe(self.on.secret_changed, self._on_secret_removed)
+        self.framework.observe(self.on.update_status, self._on_update_status)
+
         self.framework.observe(
             self.azure_provider.on.credentials_requested, self._on_azure_credentials_requested
         )
@@ -67,10 +71,17 @@ class ObjectStorageIntegratorCharm(ops.charm.CharmBase):
     ) -> bool:
         """Check for missing parameters and set status of the unit."""
         missing_options = self.get_missing_parameters()
-        logger.info(f"Missing options: {missing_options}")
         if missing_options:
+            logger.warning(f"Missing parameters: {missing_options}")
             self.unit.status = BlockedStatus(f"Missing parameters: {missing_options}")
             return
+        try:
+            secret_key = self.decode_secret_key(self.config.get("credentials"))
+        except Exception as e:
+            logger.warning(f"Error in decoding secret: {e}")
+            self.unit.status = BlockedStatus(str(e))
+            return
+
         if set_active_if_passed:
             self.unit.status = ActiveStatus()
 
@@ -79,18 +90,69 @@ class ObjectStorageIntegratorCharm(ops.charm.CharmBase):
         """Handle the charm startup event."""
         self.check_and_set_status()
 
+    def _on_update_status(self, event: ops.UpdateStatusEvent):
+        self.check_and_set_status(set_active_if_passed=True)
 
-    def decode_secret(self, secret_id: str, field: str) -> Optional[str]:
+    def _on_secret_changed(self, event: ops.SecretChangedEvent):
+        secret = event.secret
+        
+        if not self.config.get("credentials"):
+            return
+        if self.config.get("credentials") != secret.id:
+            return
+
         try:
-            secret_content = self.model.get_secret(id=secret_id).get_content()
-            if not secret_content.get(field):
-                raise ValueError(f"The field '{field}' was not found in the secret.")
-            return secret_content[field]
-        except ValueError as ve:
-            logger.warning(f"Exception in decoding secret: {ve}")
+            secret_key = self.decode_secret_key(secret.id)
+        except Exception as e:
+            secret_key = ""
+
+        if len(self.azure_provider.relations) > 0:
+            for relation in self.azure_provider.relations:
+                self.azure_provider.update_relation_data(relation.id, {"secret-key": secret_key})
+
+        self.check_and_set_status(set_active_if_passed=True)
+
+
+    def _on_secret_removed(self, event: ops.SecretRemoveEvent):
+        logger.info(f"Secret {event.secret.id} has been removed.")
+        secret = event.secret
+        
+        if not self.config.get("credentials"):
+            return
+        if self.config.get("credentials") != secret.id:
+            return
+
+        if len(self.azure_provider.relations) > 0:
+            for relation in self.azure_provider.relations:
+                self.azure_provider.update_relation_data(relation.id, {"secret-key": ""})
+
+        self.check_and_set_status(set_active_if_passed=True)
+
+
+    # def decode_secret(self, secret_id: str, field: str) -> Optional[str]:
+    #     try:
+    #         secret_content = self.model.get_secret(id=secret_id).get_content()
+    #         if not secret_content.get(field):
+    #             raise ValueError(f"The field '{field}' was not found in the secret.")
+    #         return secret_content[field]
+    #     except ValueError as ve:
+    #         logger.warning(f"Exception in decoding secret: {ve}")
+    #     except ops.model.ModelError as me:
+    #         logger.warning(f"Exception in decoding secret: {me}")
+    #     return None
+
+    def decode_secret_key(self, secret_id: str) -> Optional[str]:
+        try:
+            secret_content = self.model.get_secret(id=secret_id).get_content(refresh=True)
+            if not secret_content.get("secret-key"):
+                raise ValueError(f"The field 'secret-key' was not found in the secret '{secret_id}'.")
+            return secret_content["secret-key"]
+        except ops.model.SecretNotFoundError as sne:
+            raise ops.model.SecretNotFoundError(f"The secret '{secret_id}' does not exist.")
         except ops.model.ModelError as me:
-            logger.warning(f"Exception in decoding secret: {me}")
-        return None
+            if "permission denied" in str(me):
+                raise ops.model.ModelError(f"Permission for secret '{secret_id}' has not been granted.")
+            raise
 
     def _on_config_changed(self, event: ConfigChangedEvent) -> None:  # noqa: C901
         """Event handler for configuration changed events."""
@@ -112,7 +174,16 @@ class ObjectStorageIntegratorCharm(ops.charm.CharmBase):
                 # skip in case of default value
                 continue
 
-            update_config.update({option: str(self.config[option])})
+            if option == "credentials":
+                try:
+                    secret_key = self.decode_secret_key(self.config.get(option))
+                    update_config["secret-key"] = secret_key
+                except Exception as e:
+                    logger.warning(f"Error in decoding secret: {e}")
+                    continue
+            else:
+                update_config[option] = str(self.config.get(option))
+
 
         if len(self.azure_provider.relations) > 0:
             for relation in self.azure_provider.relations:
@@ -133,9 +204,17 @@ class ObjectStorageIntegratorCharm(ops.charm.CharmBase):
         # collect all configuration options
         for option in AZURE_OPTIONS:
             if self.config.get(option):
-                desired_configuration[option] = self.config.get(option)
+                if option == "credentials":
+                    try:
+                        secret_key = self.decode_secret_key(self.config.get(option))
+                        desired_configuration["secret-key"] = secret_key
+                    except Exception as e:
+                        logger.warning(f"Error in decoding secret: {e}")
+                        continue
+                else:
+                    desired_configuration[option] = self.config.get(option)
 
-        # update connection parameters in the relation data bug
+        # update connection parameters in the relation data bag
         self.azure_provider.update_relation_data(event.relation.id, desired_configuration)
 
 

@@ -20,6 +20,7 @@ from ops.charm import (
     RelationChangedEvent,
     RelationEvent,
     RelationJoinedEvent,
+    SecretChangedEvent,
 )
 from ops.framework import EventSource, ObjectEvents
 from ops.model import Relation
@@ -46,7 +47,7 @@ changed - keys that still exist but have new values
 deleted - key that were deleted"""
 
 
-AZURE_STORAGE_REQUIRED_OPTIONS = ["container", "storage-account", "secret-key"]
+AZURE_STORAGE_REQUIRED_OPTIONS = ["container", "storage-account", "secret-key", "connection-protocol"]
 
 
 class ObjectStorageEvent(RelationEvent):
@@ -143,7 +144,7 @@ class AzureStorageRequirerEventHandlers(RequirerEventHandlers):
 
     def _on_relation_changed_event(self, event: RelationChangedEvent) -> None:
         """Notify the charm about the presence of Azure credentials."""
-        logger.info("Azure storage relation changed...")
+        logger.info(f"Azure storage relation ({event.relation.name}) changed...")
 
         ##############################################################################
         diff = self._diff(event)
@@ -155,7 +156,6 @@ class AzureStorageRequirerEventHandlers(RequirerEventHandlers):
         contains_required_options = True
         # get current credentials data
         credentials = self.get_azure_connection_info()
-        logger.info(credentials)
         # records missing options
         missing_options = []
         for configuration_option in AZURE_STORAGE_REQUIRED_OPTIONS:
@@ -172,6 +172,48 @@ class AzureStorageRequirerEventHandlers(RequirerEventHandlers):
             logger.warning(
                 f"Some mandatory fields: {missing_options} are not present, do not emit credential change event!"
             )
+
+    def _on_secret_changed_event(self, event: SecretChangedEvent):
+        """Event notifying about a new value of a secret."""
+        if not event.secret.label:
+            return
+
+        relation = self.relation_data._relation_from_secret_label(event.secret.label)
+        if not relation:
+            logging.info(
+                f"Received secret {event.secret.label} but couldn't parse, seems irrelevant"
+            )
+            return
+
+        if relation.app == self.charm.app:
+            logging.info("Secret changed event ignored for Secret Owner")
+
+        remote_unit = None
+        for unit in relation.units:
+            if unit.app != self.charm.app:
+                remote_unit = unit
+
+        # check if the mandatory options are in the relation data
+        contains_required_options = True
+        # get current credentials data
+        credentials = self.get_azure_connection_info()
+        # records missing options
+        missing_options = []
+        for configuration_option in AZURE_STORAGE_REQUIRED_OPTIONS:
+            if configuration_option not in credentials:
+                contains_required_options = False
+                missing_options.append(configuration_option)
+
+        # emit credential change event only if all mandatory fields are present
+        if contains_required_options:
+            getattr(self.on, "credentials_changed").emit(
+                relation, app=relation.app, unit=remote_unit
+            )
+        else:
+            logger.warning(
+                f"Some mandatory fields: {missing_options} are not present, do not emit credential change event!"
+            )
+
 
     def _on_relation_broken_event(self, event: RelationBrokenEvent) -> None:
         logger.info("Azure Storage relation broken...")

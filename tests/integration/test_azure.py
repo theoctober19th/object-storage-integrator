@@ -18,6 +18,7 @@ from .helpers import (
     get_relation_data,
     is_relation_broken,
     is_relation_joined,
+    add_juju_secret,
 )
 
 logger = logging.getLogger(__name__)
@@ -81,59 +82,24 @@ async def test_build_and_deploy(ops_test: OpsTest):
     assert len(ops_test.model.applications[TEST_APP_NAME].units) == 1
 
 
-@pytest.mark.group(1)
-@pytest.mark.abort_on_fail
-async def test_sync_credential_action(ops_test: OpsTest):
-    """Tests the correct output of actions."""
-    object_storage_integrator_unit = ops_test.model.applications[CHARM_NAME].units[0]
-    action = await object_storage_integrator_unit.run_action(action_name="get-azure-credentials")
-    result = await action.wait()
-    assert result.status == "failed"
-
-    secret_key = "test-secret-key"
-
-    action_result = await fetch_action_sync_azure_credentials(
-        object_storage_integrator_unit, secret_key=secret_key
-    )
-
-    # test the correct status of the charm
-    async with ops_test.fast_forward():
-        await ops_test.model.wait_for_idle(apps=[CHARM_NAME])
-
-    assert action_result["ok"] == "Credentials successfully updated."
-
-    connection_info = await fetch_action_get_connection_info(object_storage_integrator_unit)
-    assert connection_info["secret-key"] == "************"
-
-    # checks for another update of of the credentials
-    updated_secret_key = "new-test-secret-key"
-    action_result = await fetch_action_sync_azure_credentials(
-        object_storage_integrator_unit, secret_key=updated_secret_key
-    )
-
-    async with ops_test.fast_forward():
-        await ops_test.model.wait_for_idle(apps=[CHARM_NAME])
-
-    # check that secret key has been updated
-    assert action_result["ok"] == "Credentials successfully updated."
-
-    connection_info = await fetch_action_get_connection_info(object_storage_integrator_unit)
-    assert connection_info["secret-key"] == "************"
-
 
 @pytest.mark.group(1)
 @pytest.mark.abort_on_fail
 async def test_config_options(ops_test: OpsTest):
     """Tests the correct handling of configuration parameters."""
+    secret_uri = await add_juju_secret(
+        ops_test, charm_name=CHARM_NAME, secret_label="test-secret", data={"secret-key": "new-test-secret-key"}
+    )
     configuration_parameters = {
         "storage-account": "stoacc",
         "path": "/test/path_1/",
         "container": "test-container",
+        "credentials": secret_uri
     }
     # apply new configuration options
     await ops_test.model.applications[CHARM_NAME].set_config(configuration_parameters)
     # wait for active status
-    await ops_test.model.wait_for_idle(apps=[CHARM_NAME], status="active")
+    await ops_test.model.wait_for_idle(apps=[CHARM_NAME], status="active", timeout=1000)
     # test the returns
     object_storage_integrator_unit = ops_test.model.applications[CHARM_NAME].units[0]
     action = await object_storage_integrator_unit.run_action(
@@ -144,6 +110,9 @@ async def test_config_options(ops_test: OpsTest):
     # test the correctness of the configuration fields
     assert configured_options["storage-account"] == "stoacc"
     assert configured_options["path"] == "/test/path_1/"
+    assert configured_options["credentials"] == secret_uri
+
+
 
 
 @pytest.mark.group(1)
